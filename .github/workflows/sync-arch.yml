@@ -1,0 +1,109 @@
+name: sync-architecture-diagram
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+    paths:
+      - "**.py"
+      - "**.js"
+      - "**.jsx"
+      - "**.ts"
+      - "**.tsx"
+      - "**.go"
+      - "**.rs"
+      - "**.java"
+      - "**.kt"
+      - "**.cs"
+      - "**.php"
+      - "**.rb"
+      - "**.swift"
+      - "**.c"
+      - "**.h"
+      - "**.cc"
+      - "**.cpp"
+      - "**.hpp"
+      - "scripts/**"
+      - "src/**"
+      - "lib/**"
+      - "package.json"
+      - "go.mod"
+      - "go.sum"
+      - "Cargo.toml"
+      - "pom.xml"
+      - "build.gradle"
+      - "build.gradle.kts"
+      - "*.csproj"
+      - "*.sln"
+      - "composer.json"
+      - "Gemfile"
+      - "Package.swift"
+      - "CMakeLists.txt"
+      - "meson.build"
+      - "pyproject.toml"
+      - "requirements.txt"
+      - "setup.py"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-architecture-diagram
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    if: ${{ !contains(github.event.head_commit.message, '[skip ci]') }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Guard against bot push loops
+        id: guard
+        run: |
+          author=$(git log -1 --pretty=format:'%an')
+          subject=$(git log -1 --pretty=format:'%s')
+          echo "last author: $author"
+          if [ "$author" = "github-actions[bot]" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          elif echo "$subject" | grep -qF '[skip ci]'; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Analyze repository structure
+        if: steps.guard.outputs.skip != 'true'
+        run: python3 scripts/analyze_arch.py --root . --out arch.json
+
+      - name: Build diagram URL
+        if: steps.guard.outputs.skip != 'true'
+        run: python3 scripts/build_diagram.py arch.json --out diagram.md
+
+      - name: Update README diagram
+        if: steps.guard.outputs.skip != 'true'
+        run: |
+          args="--image-file diagram.md --readme README.md"
+          if [ -f README.zh.md ]; then
+            args="$args --readme README.zh.md"
+          fi
+          python3 scripts/update_readme.py $args
+
+      - name: Commit and push diagram
+        if: steps.guard.outputs.skip != 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          files="README.md"
+          if [ -f README.zh.md ]; then
+            files="$files README.zh.md"
+          fi
+          if git diff --quiet -- $files; then
+            echo "README unchanged, nothing to commit"
+            exit 0
+          fi
+          git add $files
+          git commit -m "docs: sync architecture diagram [skip ci]"
+          git push

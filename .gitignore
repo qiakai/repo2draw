@@ -1,0 +1,4 @@
+__pycache__/
+*.pyc
+arch.json
+diagram.md
