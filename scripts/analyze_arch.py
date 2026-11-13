@@ -483,7 +483,9 @@ def tree_fallback(root, max_nodes, max_depth):
 def group_of(path, root):
     rel = os.path.relpath(path, str(root))
     parts = rel.split(os.sep)
-    return parts[0] if len(parts) > 1 else ""
+    if len(parts) <= 1:
+        return ""
+    return re.sub(r"[;|]+", "/", parts[0])[:24]
 
 
 def layout_grid(nodes, edges):

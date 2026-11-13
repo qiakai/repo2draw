@@ -32,22 +32,27 @@ MARK_END = "<!-- ARCH_DIAGRAM_END -->"
 # --------------------------------------------------------------------
 
 PATTERN = re.compile(
-    r"(?m)^" + re.escape(MARK_START) + r"[ \t]*\n(.*?)^"
-    + re.escape(MARK_END) + r"[ \t]*$",
+    r"(?m)^" + re.escape(MARK_START) + r"[ \t]*\r?\n(.*?)^"
+    + re.escape(MARK_END) + r"[ \t]*\r?$",
     re.DOTALL)
 
 
 def sync_readme(readme_path, image_md):
     path = Path(readme_path)
-    content = path.read_text(encoding="utf-8") if path.exists() else ""
+    if path.exists():
+        with open(path, "r", encoding="utf-8", newline="") as f:
+            content = f.read()
+    else:
+        content = ""
     mode = (path.stat().st_mode & 0o777) if path.exists() else 0o644
+    nl = "\r\n" if "\r\n" in content else "\n"
     if PATTERN.search(content):
         new_content = PATTERN.sub(
-            lambda m: MARK_START + "\n" + image_md + "\n" + MARK_END, content)
+            lambda m: MARK_START + nl + image_md + nl + MARK_END, content)
         status = "updated"
     else:
-        new_content = (content.rstrip("\n") + "\n\n" + MARK_START + "\n"
-                       + image_md + "\n" + MARK_END + "\n")
+        new_content = (content.rstrip("\n") + nl + nl + MARK_START + nl
+                       + image_md + nl + MARK_END + nl)
         status = "appended"
     if new_content == content:
         return content, "unchanged"
