@@ -2,16 +2,76 @@
 
 English | [中文](README.zh.md)
 
-Zero-AI architecture-diagram sync for README: a purely static analyzer
-(regex + directory rules) extracts modules and their dependencies, encodes
-them into an `x-cmd draw` chart URL, and writes it back between markers in
-`README.md`. All diagrams render from URLs — no PNG/SVG binaries are ever
-committed.
+Zero-AI architecture-diagram sync for your README: a static analyzer
+(regex + directory rules) extracts modules and dependencies from your
+repository, renders them as an `x-cmd draw` chart URL, and keeps it updated
+between markers in your `README.md`. No LLM calls, no PNG/SVG binaries —
+the diagram lives entirely in a URL.
 
-## How it works
+## Quick start (users)
 
-A three-step pipeline — one script per step, with inspectable intermediate
-artifacts:
+**1. Add the markers to your README** (skip this to auto-append at EOF):
+
+```markdown
+<!-- ARCH_DIAGRAM_START -->
+![Project Architecture](https://x-cmd.com/draw/arch2?title=repo2draw&t=shadcn&n=scripts%3Bsvc%3Bscripts%3B%3Br0c0)
+<!-- ARCH_DIAGRAM_END -->
+```
+
+**2. Create `.github/workflows/arch-diagram.yml` in your repo:**
+
+```yaml
+name: architecture-diagram
+on:
+  workflow_dispatch:            # manual trigger
+  push:
+    branches: [main, master]    # adjust to your default branch
+    paths:                      # adjust to your source paths
+      - "src/**"
+      - "**.py"
+      - "**.js"
+      - "**.ts"
+      - "**.go"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: repo2draw
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    if: ${{ !contains(github.event.head_commit.message, '[skip ci]') }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: qiakai/repo2draw@main
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet -- README.md README.zh.md 2>/dev/null; then
+            echo "README unchanged"; exit 0
+          fi
+          git add README.md README.zh.md 2>/dev/null || git add README.md
+          git commit -m "docs: sync architecture diagram [skip ci]"
+          git push
+```
+
+**3. Push.** The workflow analyzes your repo on the first run and the
+diagram appears between the markers. Later pushes that touch source paths
+refresh it automatically.
+
+That's it — the `uses: qiakai/repo2draw@main` step fetches the scripts,
+analyzes the checked-out repository, and syncs your README. The
+`paths`/`[skip ci]`/bot-author guards above prevent push-trigger loops.
+If your repo needs a different language set, extend `paths` with the
+extensions listed in `.github/workflows/sync-arch.yml` of this repository.
+
+## How it works (this repository)
+
+Three-step pipeline, one script per step, inspectable intermediate files:
 
 1. **`scripts/analyze_arch.py`** — detects the primary language from manifest
    files, skips noisy directories (`.git`, `node_modules`, `dist`, `docs`,
@@ -27,13 +87,12 @@ artifacts:
    Length guard: warn above 4000 chars, refuse above 7500.
 3. **`scripts/update_readme.py`** — sync only: line-anchored regex replaces
    the content between markers in `README.md`, appends a marker block at EOF
-   when missing; atomic writes preserving permissions; multiple READMEs in
-   one run.
+   when missing; atomic writes preserving permissions and CRLF line endings;
+   multiple READMEs in one run.
 
-The GitHub Actions workflow (`.github/workflows/sync-arch.yml`) chains the
-three steps and pushes the result back: manual `workflow_dispatch` plus
-automatic runs on pushes to the default branch that touch source paths
-(`[skip ci]` + author check + paths allowlist — three guards against loops).
+`.github/workflows/sync-arch.yml` is this repo's own dogfood pipeline
+(runs the scripts in-place), and `action.yml` is the user-facing entry
+point documented above.
 
 ## Supported languages
 
@@ -88,7 +147,7 @@ into clean layers by SCC:
 
 ![express architecture](https://x-cmd.com/draw/arch2?title=express&t=shadcn&n=index%3Bsvc%3Bindex%3Bentry%3Br0c0&n=application%3Bsvc%3Bapplication%3B%3Br1c0&n=express%3Bsvc%3Bexpress%3B%3Br1c1&n=request%3Bsvc%3Brequest%3B%3Br2c0&n=response%3Bsvc%3Bresponse%3B%3Br2c1&n=utils%3Bsvc%3Butils%3B%3Br3c0&n=view%3Bfe%3Bview%3B%3Br2c2&n=test%3Bsvc%3Btest%3B%3Br0c1&e=application%3Bexpress&e=application%3Butils&e=application%3Bview&e=express%3Bapplication&e=express%3Brequest&e=express%3Bresponse&e=index%3Bexpress&e=response%3Butils&e=test%3Butils&e=test%3Bview&b=lib%3Bapplication%20express%20request%20response%20utils%20view)
 
-## Local usage
+## Local usage (development of this repo)
 
 ```sh
 make arch     # analyze -> build diagram -> sync README.md (+ README.zh.md)
@@ -148,3 +207,5 @@ Node types: ext fe be db cloud sec bus svc; encode ";" inside fields as %3B.
   submodules are promoted and the parent collapses, keeping diagrams readable.
 - Relative imports (`from . import x`) and third-party packages produce no
   edges, avoiding spider-web graphs.
+- Self-hosting instead of `uses:`? Vendor the three scripts and copy
+  `.github/workflows/sync-arch.yml`.
