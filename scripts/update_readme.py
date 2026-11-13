@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Sync a diagram image line into README files between marker comments.
+"""Record a chart URL into README files between marker comments.
 
-Input (one of):
-  --image '![Alt](url)'   literal Markdown image line
-  --image-file FILE       read the image line from FILE
-  (default)               read the image line from stdin
+Input (auto-detected; one of):
+  --url URL          bare chart URL, wrapped into ![IMG_ALT](URL) here
+  --url-file FILE    read a bare URL from FILE
+  --image '![..](..)'  literal Markdown image line, used as-is
+  (default)          read from stdin; URL or Markdown image line
 
 Markers must be alone on their line:
 
@@ -13,11 +14,12 @@ Markers must be alone on their line:
     <!-- ARCH_DIAGRAM_END -->
 
 When no marker block exists, one is appended at EOF. Files are written
-atomically and their original permissions are preserved.
+atomically and their original permissions and CRLF line endings are
+preserved.
 
 Usage:
-  python3 scripts/build_diagram.py arch.json --out diagram.md
-  python3 scripts/update_readme.py --image-file diagram.md \
+  python3 scripts/build_diagram.py arch.json --out diagram.url
+  python3 scripts/update_readme.py --url-file diagram.url \
       --readme README.md [--readme README.zh.md]
 """
 import argparse
@@ -29,6 +31,7 @@ from pathlib import Path
 # ------------------------- 配置区（按需修改） -------------------------
 MARK_START = "<!-- ARCH_DIAGRAM_START -->"
 MARK_END = "<!-- ARCH_DIAGRAM_END -->"
+IMG_ALT = "Project Architecture"
 # --------------------------------------------------------------------
 
 PATTERN = re.compile(
@@ -65,24 +68,34 @@ def sync_readme(readme_path, image_md):
     return new_content, status
 
 
+def to_image_md(text):
+    text = text.strip()
+    if text.startswith("!["):
+        return text
+    if text.startswith("http://") or text.startswith("https://"):
+        return f"![{IMG_ALT}]({text})"
+    sys.exit("error: input is neither a Markdown image line (![...](...)) "
+             "nor an http(s) URL")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--readme", action="append", default=None,
                     help="README path (repeatable; default: README.md)")
+    ap.add_argument("--url", default=None, help="bare chart URL")
+    ap.add_argument("--url-file", default=None,
+                    help="read a bare chart URL from file")
     ap.add_argument("--image", default=None, help="literal Markdown image line")
-    ap.add_argument("--image-file", default=None,
-                    help="read Markdown image line from file")
     args = ap.parse_args()
 
     if args.image:
-        image_md = args.image.strip()
-    elif args.image_file:
-        image_md = Path(args.image_file).read_text(encoding="utf-8").strip()
+        image_md = to_image_md(args.image)
+    elif args.url:
+        image_md = to_image_md(args.url)
+    elif args.url_file:
+        image_md = to_image_md(Path(args.url_file).read_text(encoding="utf-8"))
     else:
-        image_md = sys.stdin.read().strip()
-    if not image_md.startswith("!["):
-        sys.exit("error: input does not look like a Markdown image line "
-                 "(expected ![...](...))")
+        image_md = to_image_md(sys.stdin.read())
 
     for readme in (args.readme or ["README.md"]):
         _, status = sync_readme(readme, image_md)

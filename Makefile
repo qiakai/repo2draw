@@ -2,10 +2,10 @@ PY ?= python3
 
 .PHONY: arch verify clean
 
-arch: ## 分析 -> 生成图 URL -> 同步 README.md 与 README.zh.md
+arch: ## 分析 repo -> 生成 x-cmd draw URL -> 记录 URL 到 README
 	$(PY) scripts/analyze_arch.py --root . --out arch.json
-	$(PY) scripts/build_diagram.py arch.json --out diagram.md
-	$(PY) scripts/update_readme.py --image-file diagram.md \
+	$(PY) scripts/build_diagram.py arch.json --out diagram.url
+	$(PY) scripts/update_readme.py --url-file diagram.url \
 		--readme README.md --readme README.zh.md
 
 verify: arch ## 重新生成并 HTTP 校验两份 README 中所有内嵌的图表 URL
@@ -16,4 +16,4 @@ verify: arch ## 重新生成并 HTTP 校验两份 README 中所有内嵌的图�
 	done
 
 clean:
-	rm -f arch.json diagram.md
+	rm -f arch.json diagram.url

@@ -81,14 +81,16 @@ Three-step pipeline, one script per step, inspectable intermediate files:
    gracefully degrade to a directory-tree diagram. **Outputs `arch.json`
    architecture data** (nodes carry id / type / label / sub / top-level group
    / grid cell).
-2. **`scripts/build_diagram.py`** — **generates the chart from `arch.json`**:
-   encodes the data into the `https://x-cmd.com/draw/arch2` URL parameters
-   (nodes / edges / boundary boxes / theme) and emits a Markdown image line.
-   Length guard: warn above 4000 chars, refuse above 7500.
-3. **`scripts/update_readme.py`** — sync only: line-anchored regex replaces
-   the content between markers in `README.md`, appends a marker block at EOF
-   when missing; atomic writes preserving permissions and CRLF line endings;
-   multiple READMEs in one run.
+2. **`scripts/build_diagram.py`** — **generates the chart URL from
+   `arch.json`**: encodes the data into the `https://x-cmd.com/draw/arch2`
+   URL parameters (nodes / edges / boundary boxes / theme) and outputs the
+   **bare URL** — nothing more. Length guard: warn above 4000 chars, refuse
+   above 7500.
+3. **`scripts/update_readme.py`** — **records the URL into the Markdown
+   document**: wraps it into an image line (`![IMG_ALT](url)`), then a
+   line-anchored regex replaces the content between markers in `README.md`;
+   appends a marker block at EOF when missing; atomic writes preserving
+   permissions and CRLF line endings; multiple READMEs in one run.
 
 `.github/workflows/sync-arch.yml` is this repo's own dogfood pipeline
 (runs the scripts in-place), and `action.yml` is the user-facing entry
@@ -150,17 +152,17 @@ into clean layers by SCC:
 ## Local usage (development of this repo)
 
 ```sh
-make arch     # analyze -> build diagram -> sync README.md (+ README.zh.md)
+make arch     # analyze repo -> build URL -> record into README.md (+ README.zh.md)
 make verify   # regenerate, then curl-check every embedded chart URL
-make clean    # remove intermediate arch.json / diagram.md
+make clean    # remove intermediate arch.json / diagram.url
 ```
 
-Without `make`, use the exact same commands as CI:
+Without `make`, the exact same three steps as CI:
 
 ```sh
 python3 scripts/analyze_arch.py --root . --out arch.json
-python3 scripts/build_diagram.py arch.json --out diagram.md
-python3 scripts/update_readme.py --image-file diagram.md --readme README.md --readme README.zh.md
+python3 scripts/build_diagram.py arch.json --out diagram.url
+python3 scripts/update_readme.py --url-file diagram.url --readme README.md --readme README.zh.md
 ```
 
 ## Configuration
@@ -173,10 +175,10 @@ See the marked config block at the top of `scripts/build_diagram.py`:
 | `THEME` | `shadcn` | one of 21 themes (`xcmd`/`evil`/`pipeline`/`gradient`…) |
 | `SCHEME` | `""` | set to `dark` to force the dark scheme |
 | `BOUNDARIES` | `True` | draw top-level group boundaries (`--no-boundaries` to disable) |
-| `IMG_ALT` | `Project Architecture` | image alt text |
 
 `scripts/update_readme.py` config block: `MARK_START` / `MARK_END` markers
-(must be alone on their line).
+(must be alone on their line) and `IMG_ALT` (image alt text used when
+wrapping a bare URL).
 
 `analyze_arch.py` flags: `--max-nodes 15`, `--max-edges 40`,
 `--max-depth 2` (tree fallback depth), `--title`.

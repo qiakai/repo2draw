@@ -18,7 +18,7 @@ runs:
           https://github.com/qiakai/repo2draw.git \
           "$RUNNER_TEMP/repo2draw-tool"
 
-    - name: Analyze repository structure
+    - name: Analyze repository
       shell: bash
       run: |
         python3 "$RUNNER_TEMP/repo2draw-tool/scripts/analyze_arch.py" \
@@ -28,12 +28,12 @@ runs:
       shell: bash
       run: |
         python3 "$RUNNER_TEMP/repo2draw-tool/scripts/build_diagram.py" \
-          "$RUNNER_TEMP/repo2draw-arch.json" --out "$RUNNER_TEMP/repo2draw-diagram.md"
+          "$RUNNER_TEMP/repo2draw-arch.json" --out "$RUNNER_TEMP/repo2draw.url"
 
-    - name: Sync README markers
+    - name: Record URL into README
       shell: bash
       run: |
-        args="--image-file $RUNNER_TEMP/repo2draw-diagram.md --readme README.md"
+        args="--url-file $RUNNER_TEMP/repo2draw.url --readme README.md"
         if [ -f README.zh.md ]; then
           args="$args --readme README.zh.md"
         fi

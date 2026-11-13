@@ -75,12 +75,14 @@ bot 作者校验用来防 push 回写死循环。其他语言请按本仓库
    引用度截断；循环依赖通过 SCC 缩点布局）。无法识别语言时优雅降级为
    目录树结构图。**输出 `arch.json` 架构数据**（节点含 id / 类型 / 标签 /
    副标签 / 顶层目录分组 / 网格坐标）。
-2. **`scripts/build_diagram.py`** — **根据 `arch.json` 生成图**：把数据编码进
-   `https://x-cmd.com/draw/arch2` 的 URL 参数（节点 / 连线 / 分组边界 / 主题），
-   输出 Markdown 图片行。长度守卫：>4000 字符告警，>7500 字符拒绝输出。
-3. **`scripts/update_readme.py`** — 只做同步：整行锚定正则替换占位符之间的
-   内容，无占位符时追加到文末；原子写入、保留文件权限与 CRLF 行尾，
-   可同时同步多份 README。
+2. **`scripts/build_diagram.py`** — **根据 `arch.json` 生成图表 URL**：把数据
+   编码进 `https://x-cmd.com/draw/arch2` 的 URL 参数（节点 / 连线 / 分组边界 /
+   主题），只输出**裸 URL**，不做任何 Markdown 包装。长度守卫：>4000 字符
+   告警，>7500 字符拒绝输出。
+3. **`scripts/update_readme.py`** — **把 URL 记录进 Markdown 文档**：先把裸 URL
+   包装成图片行（`![IMG_ALT](url)`），再用整行锚定正则替换占位符之间的内容；
+   无占位符时追加到文末；原子写入、保留文件权限与 CRLF 行尾，可同时同步多份
+   README。
 
 `.github/workflows/sync-arch.yml` 是本仓库自用的流水线（直接运行脚本）,
 `action.yml` 就是上文普通用户使用的 Action 入口。
@@ -137,17 +139,17 @@ templating=Frontend）,src 分组边界，40 条依赖边经 SCC 缩点分层：
 ## 本地使用（开发本仓库）
 
 ```sh
-make arch     # 分析 -> 生成图 -> 同步 README.md 与 README.zh.md
+make arch     # 分析 repo -> 生成 URL -> 记录 URL 到 README.md 与 README.zh.md
 make verify   # 重新生成并 HTTP 校验两份 README 中所有内嵌图表 URL
-make clean    # 删除中间产物 arch.json / diagram.md
+make clean    # 删除中间产物 arch.json / diagram.url
 ```
 
-没有 `make` 的环境直接用底层命令（与 CI 完全一致）：
+没有 `make` 的环境直接跑与 CI 相同的三步：
 
 ```sh
 python3 scripts/analyze_arch.py --root . --out arch.json
-python3 scripts/build_diagram.py arch.json --out diagram.md
-python3 scripts/update_readme.py --image-file diagram.md --readme README.md --readme README.zh.md
+python3 scripts/build_diagram.py arch.json --out diagram.url
+python3 scripts/update_readme.py --url-file diagram.url --readme README.md --readme README.zh.md
 ```
 
 ## 配置
@@ -160,9 +162,9 @@ python3 scripts/update_readme.py --image-file diagram.md --readme README.md --re
 | `THEME` | `shadcn` | 主题（共 21 种：`xcmd`/`evil`/`pipeline`/`gradient`…） |
 | `SCHEME` | `""` | 置为 `dark` 强制暗色 |
 | `BOUNDARIES` | `True` | 是否绘制顶层目录分组边界（`--no-boundaries` 可关） |
-| `IMG_ALT` | `Project Architecture` | 图片 alt 文本 |
 
-`scripts/update_readme.py` 配置区：`MARK_START` / `MARK_END` 占位符（需独占一行）。
+`scripts/update_readme.py` 配置区：`MARK_START` / `MARK_END` 占位符（需独占一行）
+和 `IMG_ALT`（包装裸 URL 时使用的图片 alt 文本）。
 
 `analyze_arch.py` 参数：`--max-nodes 15`（节点上限）、`--max-edges 40`、
 `--max-depth 2`（目录树兜底深度）、`--title`（图标题）。

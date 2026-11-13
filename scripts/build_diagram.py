@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Build an x-cmd draw URL from arch.json (produced by analyze_arch.py).
 
-Reads the architecture DSL, encodes it into arch2 URL parameters
-(nodes / edges / boundaries / theme), and emits a Markdown image line.
+Reads the architecture DSL produced by analyze_arch.py, encodes it into
+arch2 URL parameters (nodes / edges / boundaries / theme), and outputs the
+bare chart URL — nothing more. Recording the URL into a Markdown document
+is a separate step (scripts/update_readme.py).
 
 The arch2 endpoint format (verified against https://x-cmd.com/draw/arch2):
 
@@ -17,7 +19,7 @@ there is no per-node color override. Boundary boxes get their own accent
 colors, so multi-node groups add extra palette variety. Invalid values
 return HTTP 400 with the list of legal values.
 
-Usage: python3 scripts/build_diagram.py arch.json [--out diagram.md]
+Usage: python3 scripts/build_diagram.py arch.json [--out diagram.url]
 """
 import argparse
 import json
@@ -30,7 +32,6 @@ from pathlib import Path
 ENDPOINT = "https://x-cmd.com/draw/arch2"
 THEME = "shadcn"   # t= 主题（共 21 种：shadcn/xcmd/evil/pipeline/gradient...）
 SCHEME = ""        # "dark" 强制暗色；"" 跟随系统
-IMG_ALT = "Project Architecture"
 BOUNDARIES = True  # 是否按顶层目录绘制分组边界（≥2 节点才成组）
 URL_WARN = 4000    # 超过则告警（浏览器/网关通常 2~8KB 截断）
 URL_MAX = 7500     # 超过则拒绝输出
@@ -98,14 +99,12 @@ def main():
     ap.add_argument("arch", nargs="?", default="arch.json",
                     help="arch DSL JSON path (default: arch.json)")
     ap.add_argument("--out", default=None,
-                    help="write Markdown image line to file (default: stdout)")
+                    help="write the bare URL to this file (default: stdout)")
     ap.add_argument("--theme", default=None, help="override theme")
     ap.add_argument("--title", default=None, help="override diagram title")
     ap.add_argument("--scheme", default=None, help="override color scheme")
     ap.add_argument("--no-boundaries", action="store_true",
                     help="skip boundary boxes")
-    ap.add_argument("--print-url", action="store_true",
-                    help="print only the bare URL")
     args = ap.parse_args()
 
     model = json.loads(Path(args.arch).read_text(encoding="utf-8"))
@@ -119,17 +118,13 @@ def main():
                  f"reduce --max-nodes or shorten labels")
     if len(url) > URL_WARN:
         print(f"warning: URL is {len(url)} chars (> {URL_WARN})", file=sys.stderr)
-    print(f"[repo2draw] URL ({len(url)} chars): {url}", file=sys.stderr)
+    print(f"[repo2draw] URL ({len(url)} chars)", file=sys.stderr)
 
-    if args.print_url:
-        print(url)
-        return
-    line = f"![{IMG_ALT}]({url})"
     if args.out:
-        Path(args.out).write_text(line + "\n", encoding="utf-8")
+        Path(args.out).write_text(url + "\n", encoding="utf-8")
         print(f"[repo2draw] wrote {args.out}", file=sys.stderr)
     else:
-        print(line)
+        print(url)
 
 
 if __name__ == "__main__":
