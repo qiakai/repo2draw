@@ -1,0 +1,20 @@
+{
+  "title": "repo2draw",
+  "nodes": [
+    {"id": "makefile", "type": "cloud", "label": "Makefile", "sub": "本地编排"},
+    {"id": "action", "type": "cloud", "label": "action.yml", "sub": "用户入口"},
+    {"id": "workflow", "type": "cloud", "label": "sync-arch.yml", "sub": "自用 CI"},
+    {"id": "analyze", "type": "svc", "label": "analyze_arch.py", "sub": "分析 repo"},
+    {"id": "build", "type": "svc", "label": "build_diagram.py", "sub": "生成 x-cmd URL"},
+    {"id": "record", "type": "svc", "label": "update_readme.py", "sub": "记录 URL 到 md"},
+    {"id": "readme", "type": "fe", "label": "README.md", "sub": "双语文档"}
+  ],
+  "edges": [
+    {"from": "analyze", "to": "build", "label": "arch.json", "variant": "main"},
+    {"from": "build", "to": "record", "label": "diagram.url", "variant": "main"},
+    {"from": "record", "to": "readme"},
+    {"from": "makefile", "to": "analyze", "variant": "dash"},
+    {"from": "action", "to": "analyze", "variant": "dash"},
+    {"from": "workflow", "to": "analyze", "variant": "dash"}
+  ]
+}

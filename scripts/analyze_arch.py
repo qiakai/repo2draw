@@ -93,6 +93,8 @@ C_INCLUDE = re.compile(r'^\s*#\s*include\s+"([^"]+)"', re.M)
 
 MAX_CANDIDATES_SCAN = 80
 MAX_FILES_SCANNED = 2000
+VALID_TYPES = {"ext", "fe", "be", "db", "cloud", "sec", "bus", "svc"}
+CONFIG_NAME = "repo2draw.json"
 
 
 def slug(name):
@@ -559,7 +561,76 @@ def layout_grid(nodes, edges):
         nd["grid"] = {"row": row, "col": col}
 
 
-def build_model(root, max_nodes, max_edges, max_depth, title):
+def model_from_config(cfg, root, max_nodes, max_edges, title):
+    raw_nodes = cfg.get("nodes") or []
+    nodes, explicit, seen = [], {}, set()
+    for nd in raw_nodes:
+        nid = slug(str(nd.get("id") or nd.get("label") or "node"))
+        if not nid or nid in seen:
+            continue
+        seen.add(nid)
+        grid = nd.get("grid")
+        if isinstance(grid, dict):
+            try:
+                explicit[nid] = {"row": max(int(grid["row"]), 0),
+                                 "col": max(int(grid["col"]), 0)}
+            except (KeyError, TypeError, ValueError):
+                pass
+        nodes.append({
+            "id": nid,
+            "type": nd.get("type") if nd.get("type") in VALID_TYPES else "svc",
+            "label": clean_label(str(nd.get("label") or nid)),
+            "sub": re.sub(r"[;|]+", "/", str(nd.get("sub") or ""))[:24],
+            "group": re.sub(r"[;|]+", "/", str(nd.get("group") or ""))[:24],
+        })
+    if len(nodes) > max_nodes:
+        print(f"[repo2draw] warning: {len(nodes)} config nodes, keeping {max_nodes}",
+              file=sys.stderr)
+        nodes = nodes[:max_nodes]
+        explicit = {k: v for k, v in explicit.items()
+                    if k in {n["id"] for n in nodes}}
+    keep = {n["id"] for n in nodes}
+    edges, seen_e = [], set()
+    for e in (cfg.get("edges") or []):
+        a = slug(str(e.get("from", "")))
+        b = slug(str(e.get("to", "")))
+        if a not in keep or b not in keep or a == b or (a, b) in seen_e:
+            continue
+        seen_e.add((a, b))
+        edge = {"from": a, "to": b}
+        if e.get("label"):
+            edge["label"] = re.sub(r"[;]+", "/", str(e["label"]))[:24]
+        if e.get("variant") in ("main", "dash"):
+            edge["variant"] = e["variant"]
+        edges.append(edge)
+    edges = edges[:max_edges]
+    if not nodes:
+        sys.exit("error: repo2draw.json declares no usable nodes")
+    layout_grid(nodes, [(e["from"], e["to"]) for e in edges])
+    for nd in nodes:
+        if nd["id"] in explicit:
+            nd["grid"] = explicit[nd["id"]]
+    return {
+        "generator": "repo2draw",
+        "version": 1,
+        "repo": os.path.basename(str(root)) or "repo",
+        "language": "config",
+        "title": title or cfg.get("title") or os.path.basename(str(root)) or "repo",
+        "nodes": [{k: nd[k] for k in ("id", "type", "label", "sub", "group", "grid")}
+                  for nd in nodes],
+        "edges": edges,
+    }
+
+
+def build_model(root, max_nodes, max_edges, max_depth, title, config=None):
+    cfg_path = Path(config) if config else (root / CONFIG_NAME)
+    if cfg_path.is_file():
+        print(f"[repo2draw] using declared architecture: {cfg_path}", file=sys.stderr)
+        try:
+            cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as e:
+            sys.exit(f"error: {cfg_path}: invalid JSON: {e}")
+        return model_from_config(cfg, root, max_nodes, max_edges, title)
     lang = detect_language(root)
     if lang is None:
         nodes, edge_tuples = tree_fallback(root, max_nodes, max_depth)
@@ -623,6 +694,8 @@ def main():
     ap.add_argument("--max-depth", type=int, default=2,
                     help="directory-tree fallback depth")
     ap.add_argument("--title", default=None, help="diagram title")
+    ap.add_argument("--config", default=None,
+                    help=f"declared architecture JSON (default: ./{CONFIG_NAME} when present)")
     args = ap.parse_args()
 
     root = Path(args.root).resolve()
@@ -630,7 +703,7 @@ def main():
         sys.exit(f"error: {root} is not a directory")
 
     model = build_model(root, args.max_nodes, args.max_edges,
-                        args.max_depth, args.title)
+                        args.max_depth, args.title, config=args.config)
     payload = json.dumps(model, ensure_ascii=False, indent=2)
 
     print(f"[repo2draw] language={model['language']} "
